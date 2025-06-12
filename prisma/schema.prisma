@@ -1,0 +1,273 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+
+model User {
+  id Int @id @default(autoincrement())
+  username String @unique
+  email String? @unique
+  phone String 
+  password String
+  fullName String
+  role Role @default(PATIENT)
+  dob DateTime
+  bloodType String?
+  isActive Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  doctor Doctor? @relation("UserDoctor")
+  patient Patient? @relation("UserPatient")
+  dispensed  Dispensation[] @relation("DispensedBy")
+  session LoginSessions[] @relation()
+
+  @@map("users")
+}
+
+enum Role {
+  ADMIN
+  DOCTOR
+  NURSE
+  RECEPTIONIST
+  PATIENT
+  LAB_TECHNICIAN
+  PHARMACIST
+}
+
+model Doctor {
+  id Int @id @default(autoincrement())
+  userId Int @unique
+  departmentId Int
+  specialization String
+  licenseNumber String @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation("UserDoctor",fields: [userId],references: [id])
+  department Department @relation(fields: [departmentId],references: [id])
+
+  medicalRecords MedicalRecord[]
+  appointements Appointment[]
+  prescription Prescription[]
+
+  @@map("doctors")
+}
+
+model Patient {
+  id Int @id @default(autoincrement())
+  userId Int @unique
+  address String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation("UserPatient",fields: [userId],references: [id])
+  appointments Appointment[]
+  medicalRecords MedicalRecord[]
+  bills Bill[]
+  prescriptions Prescription[]
+
+  @@map("patients")
+}
+
+model Department{
+  id Int @id @default(autoincrement())
+  name String @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  doctors Doctor[]
+
+  @@map("departments")
+}
+
+model Appointment {
+  id Int @id @default(autoincrement())
+  patientId Int
+  doctorId Int
+  status AppointmentStatus @default(SCHEDULED)
+  appointmentDate DateTime
+  reason String?
+  notes String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  patient Patient @relation(fields: [patientId],references: [id])
+  doctor Doctor @relation(fields: [doctorId],references: [id])
+
+  @@map("appointments")
+}
+
+enum AppointmentStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+model MedicalRecord {
+  id Int @id @default(autoincrement())
+  patientId Int
+  doctorId Int?
+  description String
+  recordDate DateTime @default(now())
+  type String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  patient Patient @relation(fields: [patientId],references: [id])
+  doctor Doctor? @relation(fields: [doctorId],references: [id])
+
+  @@map("medicalrecords")
+}
+
+model Bill {
+  id Int @id @default(autoincrement())
+  patientId Int
+  amount Float
+  status BillStatus @default(PENDING)
+  issuedAt DateTime @default(now())
+  paidAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  patient Patient @relation(fields: [patientId],references: [id])
+  payments Payment[]
+
+  @@map("bills")
+}
+
+enum BillStatus {
+  PAID
+  PENDING
+  CANCELLED
+}
+
+model Payment {
+  id Int @id @default(autoincrement())
+  billId Int
+  amount Float
+  method PaymentMethod
+  paidAt DateTime @default(now())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  bill Bill @relation(fields: [billId],references: [id])
+
+  @@map("payments")
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  INSURANCE
+  UPI
+}
+
+model Inventory {
+  id Int @id @default(autoincrement())
+  name String
+  category String // e.g. 'Consumable', 'Equipment'
+  quantity Int
+  unit String
+  expiryDate DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("inventory")
+}
+
+model PharmacyItem {
+  id Int @id @default(autoincrement())
+  name String
+  description String?
+  dosageForm String // e.g., tablet, injection
+  strength String
+  manufacturer String
+  quantity Int
+  unit String
+  expiryDate DateTime
+  batchNumber String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  prescription PrescriptionItem[]
+
+  @@map("pharmacyitems")
+}
+
+model Prescription {
+  id Int @id @default(autoincrement())
+  patientId Int
+  doctorId Int
+  issuedAt DateTime @default(now())
+  notes String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  patient Patient @relation(fields: [patientId],references: [id])
+  doctor Doctor @relation(fields: [doctorId],references: [id])
+  items PrescriptionItem[]
+
+  @@map("prescriptions")
+}
+
+model PrescriptionItem {
+  id Int @id @default(autoincrement())
+  prescriptionId Int
+  pharmacyItemId Int
+  dosage String
+  duration String
+  quantity Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  prescription Prescription @relation(fields: [prescriptionId],references: [id])
+  pharmacyItem PharmacyItem @relation(fields: [pharmacyItemId],references: [id])
+  dispensation Dispensation? 
+
+  @@map("prescriptionitems")
+}
+
+model Dispensation {
+  id Int @id @default(autoincrement())
+  prescriptionItemId Int @unique
+  dispensedById    Int     // Pharmacist or nurse
+  dispensedAt      DateTime   @default(now())
+  quantity         Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  prescriptionItem PrescriptionItem @relation(fields: [prescriptionItemId], references: [id])
+  dispensedBy User @relation("DispensedBy", fields: [dispensedById], references: [id])
+  
+  @@map("dispensions")
+}
+
+model LoginSessions {
+  id Int @id @default(autoincrement())
+  userId Int
+  sessionId String @unique
+  loginTime DateTime @default(now())
+  logoutTime DateTime?
+  refreshToken String
+  isActive Boolean @default(true)
+  expiresAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId],references: [id])
+
+  @@map("loginSessions")
+}
